@@ -1,11 +1,12 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { createChart, LineSeries, CandlestickSeries } from "lightweight-charts";
 import LoadingSpinner from "./LoadingSpinner";
+import { ta } from 'oakscriptjs';
 
 const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, ref) => {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
-  const seriesRefs = useRef({ bid: null, ask: null, mid: null, candlestick: null });
+  const seriesRefs = useRef({ bid: null, ask: null, mid: null, candlestick: null, ema9: null, ema20: null });
   const resizeObserverRef = useRef(null);
   const lastQuoteCountRef = useRef(0);
   const markersRef = useRef([]);
@@ -14,6 +15,7 @@ const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, 
   const allTicksData = useRef([]);
   const aggregatedLineData = useRef({ bid: [], ask: [], mid: [] });
   const aggregatedCandleData = useRef([]);
+  const emaData = useRef({ ema9: [], ema20: [] });
 
   // Expose method to add markers
   useImperativeHandle(ref, () => ({
@@ -141,6 +143,22 @@ const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, 
       wickDownColor: '#F23645',
     });
 
+    seriesRefs.current.ema9 = chart.addSeries(LineSeries, {
+      color: "#FFA500",
+      lineWidth: 2,
+      title: "EMA 9",
+      lastValueVisible: true,
+      priceLineVisible: false,
+    });
+
+    seriesRefs.current.ema20 = chart.addSeries(LineSeries, {
+      color: "#9C27B0",
+      lineWidth: 2,
+      title: "EMA 20",
+      lastValueVisible: true,
+      priceLineVisible: false,
+    });
+
     resizeObserverRef.current = new ResizeObserver((entries) => {
       if (!entries.length || !chartRef.current) return;
       const { width, height } = entries[0].contentRect;
@@ -228,6 +246,12 @@ const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, 
     seriesRefs.current.mid.setData(newLineData.mid);
     seriesRefs.current.candlestick.setData(newCandleData);
 
+    // Calculate and update EMAs
+    const newEMAs = calculateEMAs(newLineData.mid);
+    emaData.current = newEMAs;
+    seriesRefs.current.ema9.setData(newEMAs.ema9);
+    seriesRefs.current.ema20.setData(newEMAs.ema20);
+
     updateTimeScale(timeframe);
     chartInstance.current.timeScale().fitContent();
 
@@ -246,9 +270,12 @@ const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, 
         seriesRefs.current.ask.setData([]);
         seriesRefs.current.mid.setData([]);
         seriesRefs.current.candlestick.setData([]);
+        seriesRefs.current.ema9.setData([]);
+        seriesRefs.current.ema20.setData([]);
         allTicksData.current = [];
         aggregatedLineData.current = { bid: [], ask: [], mid: [] };
         aggregatedCandleData.current = [];
+        emaData.current = { ema9: [], ema20: [] };
         markersRef.current = [];
         markerSeriesRef.current = null;
       }
@@ -322,6 +349,30 @@ const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, 
     return candles;
   };
 
+  const calculateEMAs = (midData) => {
+    if (midData.length === 0) return { ema9: [], ema20: [] };
+
+    // Extract close prices from mid data
+    const closePrices = midData.map(d => d.value);
+
+    // Calculate EMAs using oakscriptjs
+    const ema9Values = ta.ema(closePrices, 9);
+    const ema20Values = ta.ema(closePrices, 20);
+
+    // Map back to chart format with timestamps
+    const ema9Data = midData.map((d, i) => ({
+      time: d.time,
+      value: ema9Values[i]
+    })).filter(d => d.value !== null && !isNaN(d.value));
+
+    const ema20Data = midData.map((d, i) => ({
+      time: d.time,
+      value: ema20Values[i]
+    })).filter(d => d.value !== null && !isNaN(d.value));
+
+    return { ema9: ema9Data, ema20: ema20Data };
+  };
+
   useEffect(() => {
     if (!sessionData.quote || !seriesRefs.current.bid) return;
 
@@ -358,6 +409,20 @@ const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, 
         lastCandle.low = Math.min(lastCandle.low, mid);
         lastCandle.close = mid;
         seriesRefs.current.candlestick.update(lastCandle);
+      }
+
+      // Update EMAs in real-time
+      const updatedEMAs = calculateEMAs(aggregatedLineData.current.mid);
+      emaData.current = updatedEMAs;
+
+      // Update only the last EMA values to avoid full recalculation
+      if (updatedEMAs.ema9.length > 0) {
+        const lastEma9 = updatedEMAs.ema9[updatedEMAs.ema9.length - 1];
+        seriesRefs.current.ema9.update(lastEma9);
+      }
+      if (updatedEMAs.ema20.length > 0) {
+        const lastEma20 = updatedEMAs.ema20[updatedEMAs.ema20.length - 1];
+        seriesRefs.current.ema20.update(lastEma20);
       }
     } catch (error) {
       console.error('Error updating chart:', error);

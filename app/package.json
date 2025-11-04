@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "lightweight-charts": "^5.0.9",
+    "oakscriptjs": "github:houseofai/oakscriptJS#main",
     "pako": "^2.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
