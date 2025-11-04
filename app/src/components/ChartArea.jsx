@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { createChart, LineSeries, CandlestickSeries } from "lightweight-charts";
 import LoadingSpinner from "./LoadingSpinner";
-import { ta } from 'oakscriptjs';
+import { ta } from '@deepentropy/oakscriptjs';
 
 const ChartArea = forwardRef(({ sessionData, isLoading, chartType, timeframe }, ref) => {
   const chartRef = useRef(null);
