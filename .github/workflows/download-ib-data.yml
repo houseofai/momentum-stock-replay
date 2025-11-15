@@ -12,14 +12,20 @@ jobs:
 
     services:
       ib-gateway:
-        image: ghcr.io/gnzsnz/ib-gateway:latest
+        image: ghcr.io/gnzsnz/ib-gateway:stable
         env:
           TWS_USERID: ${{ secrets.IB_USERNAME }}
           TWS_PASSWORD: ${{ secrets.IB_PASSWORD }}
           TRADING_MODE: paper
-          TWS_ACCEPT_INCOMING: accept
+          VNC_SERVER_PASSWORD: ''
+          TWOFA_TIMEOUT_ACTION: restart
         ports:
           - 4002:4002  # Paper trading API port
+        options: >-
+          --health-cmd "nc -z localhost 4002"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
 
     steps:
       - name: Checkout repository
@@ -39,8 +45,19 @@ jobs:
 
       - name: Wait for IB Gateway to start
         run: |
-          echo "Waiting 90 seconds for IB Gateway to initialize..."
-          sleep 90
+          echo "Waiting for IB Gateway to initialize..."
+          echo "Checking if port 4002 is accessible..."
+          for i in {1..30}; do
+            if nc -z localhost 4002; then
+              echo "✓ Port 4002 is open after $((i*5)) seconds"
+              sleep 30
+              break
+            fi
+            echo "Attempt $i: Port 4002 not ready yet..."
+            sleep 5
+          done
+          echo "Final check with netstat:"
+          netstat -tln | grep 4002 || echo "Port 4002 not found in netstat"
 
       - name: Download historical data
         run: |
