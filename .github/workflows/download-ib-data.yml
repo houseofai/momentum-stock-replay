@@ -1,0 +1,71 @@
+name: Download IB Historical Data
+
+on:
+  schedule:
+    # Run Monday-Friday at 2 PM UTC (9 AM EST / 10 PM EST after market close)
+    - cron: '0 14 * * 1-5'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  download-historical-data:
+    runs-on: ubuntu-latest
+
+    services:
+      ib-gateway:
+        image: ghcr.io/gnzsnz/ib-gateway:latest
+        env:
+          TWS_USERID: ${{ secrets.IB_USERNAME }}
+          TWS_PASSWORD: ${{ secrets.IB_PASSWORD }}
+          TRADING_MODE: paper
+          TWS_ACCEPT_INCOMING: accept
+        ports:
+          - 4002:4002  # Paper trading API port
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Wait for IB Gateway to start
+        run: |
+          echo "Waiting 90 seconds for IB Gateway to initialize..."
+          sleep 90
+
+      - name: Download historical data
+        run: |
+          python scripts/download_historical_data.py
+        env:
+          IB_HOST: ib-gateway
+          IB_PORT: 4002
+          IB_CLIENT_ID: 1
+
+      - name: Compress data
+        run: |
+          python tools/compress.py
+        continue-on-error: true
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      - name: Commit and push data
+        run: |
+          git add sessions/*.csv sessions/*.bin.gz 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No new data to commit"
+          else
+            git commit -m "Add historical data for $(date +'%Y-%m-%d')"
+            git push
+          fi

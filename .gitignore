@@ -3,3 +3,23 @@
 nul
 .tmp
 .claude
+
+# Security - credentials and sensitive data
+.env
+.env.local
+*.credentials
+config.ini
+IBController.ini
+
+# IB Gateway local files
+launch_ibgateway_local.bat
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
